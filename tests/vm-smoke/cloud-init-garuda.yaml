@@ -95,45 +95,30 @@ write_files:
           fi
       }
 
-      install_garuda_repo() {
-          # Garuda's repo lives at builds.garudalinux.org. Pull keyring
-          # + mirrorlist directly so we don't depend on a network
-          # pacman-key recv-key roundtrip.
-          local mirror="https://builds.garudalinux.org/repos/garuda/x86_64"
-          local tmp
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' RETURN
-
-          local keyring_pkg mirrorlist_pkg
-          keyring_pkg="$(curl -sL "${mirror}/" \
-              | grep -oE 'garuda-(hotfixes-)?keyring-[0-9][^"<]*-any\.pkg\.tar\.zst' \
-              | sort -V | tail -1)"
-          mirrorlist_pkg="$(curl -sL "${mirror}/" \
-              | grep -oE 'garuda-mirrorlist-[0-9][^"<]*-any\.pkg\.tar\.zst' \
-              | sort -V | tail -1)"
-          if [[ -z "$keyring_pkg" || -z "$mirrorlist_pkg" ]]; then
-              echo "could not resolve garuda-keyring / -mirrorlist from ${mirror}" >&2
-              exit 1
-          fi
-
-          curl -L --fail "${mirror}/${keyring_pkg}" \
-              -o "$tmp/garuda-keyring.pkg.tar.zst"
-          curl -L --fail "${mirror}/${mirrorlist_pkg}" \
-              -o "$tmp/garuda-mirrorlist.pkg.tar.zst"
-
-          pacman -U --noconfirm \
-              "$tmp/garuda-keyring.pkg.tar.zst" \
-              "$tmp/garuda-mirrorlist.pkg.tar.zst"
-          pacman-key --populate garuda
-
-          if ! grep -q '^\[garuda\]' /etc/pacman.conf; then
-              cat >> /etc/pacman.conf <<'EOF'
-
-      [garuda]
-      Include = /etc/pacman.d/garuda-mirrorlist
+      brand_as_garuda() {
+          # Garuda doesn't publish a standalone garuda-keyring /
+          # garuda-mirrorlist on builds.garudalinux.org/repos/garuda
+          # (verified 2026-05-31 — the directory has zero matching
+          # packages). Real Garuda installs source keyring + mirrorlist
+          # from chaotic-aur, which we already enable above. The
+          # remaining piece of being "Garuda" for installer purposes is
+          # the /etc/os-release ID — distro.current_distro() keys off
+          # that. Write a Garuda-flavoured os-release in place so the
+          # installer's distro layer hits its garuda branch (via
+          # ID_LIKE=arch) and any future explicit garuda row.
+          cat > /etc/os-release <<'EOF'
+      NAME="Garuda Linux"
+      PRETTY_NAME="Garuda Linux"
+      ID=garuda
+      ID_LIKE=arch
+      BUILD_ID=rolling
+      ANSI_COLOR="38;2;23;147;209"
+      HOME_URL="https://garudalinux.org/"
+      DOCUMENTATION_URL="https://wiki.garudalinux.org/"
+      SUPPORT_URL="https://forum.garudalinux.org/"
+      BUG_REPORT_URL="https://gitlab.com/garuda-linux/"
+      LOGO=garudalinux
       EOF
-          fi
-
           pacman -Syy --noconfirm
       }
 
@@ -150,7 +135,7 @@ write_files:
           sudo
 
       install_chaotic_aur
-      install_garuda_repo
+      brand_as_garuda
 
       pacman -S --noconfirm --needed \
           extra-cmake-modules \
