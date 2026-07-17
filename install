@@ -11,4 +11,6 @@ sys.path.insert(0, str(REPO / "src" / "scripts"))
 
 from cli import run_install
 
-raise SystemExit(run_install(sys.argv[1:]))
+# tui=True: bare runs on a real TTY get the selection wizard; flags,
+# headless envs, and ./legacy-install keep the classic flow.
+raise SystemExit(run_install(sys.argv[1:], tui=True))
