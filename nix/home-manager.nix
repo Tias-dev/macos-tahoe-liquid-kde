@@ -22,6 +22,20 @@ let
       fi
     done
   '';
+  setAssetsWritable = pkgs.writeShellScript "mac-tahoe-set-config-writable" ''
+    set -eu
+    for folder in .config .local; do
+      ${pkgs.coreutils}/bin/chmod -R u+w "$HOME/$folder"
+    done
+  '';
+
+  mapFolderItems = rootFolder: folderToMap: (lib.mapAttrs' (folder: _: {
+      name = "${rootFolder}/${folder}";
+      value = {
+        source = "${folderToMap}/${folder}";
+        recursive = true;
+      };
+    }) (builtins.readDir "${folderToMap}"));
 in {
   options.programs.mac-tahoe = {
     enable = lib.mkEnableOption "MacTahoe Plasma styling and live theme switching";
@@ -45,16 +59,13 @@ in {
       name = ".themes/${name}";
       value.source = "${assets}/share/themes/${name}";
     }) names);
-    xdg.dataFile = {
-      "plasma/desktoptheme" = { source = "${assets}/share/plasma/desktoptheme"; recursive = true; };
-      "plasma/look-and-feel" = { source = "${assets}/share/plasma/look-and-feel"; recursive = true; };
-      "plasma/plasmoids" = { source = "${assets}/share/plasma/plasmoids"; recursive = true; };
-      "aurorae/themes" = { source = "${assets}/share/aurorae/themes"; recursive = true; };
-      "color-schemes" = { source = "${assets}/share/color-schemes"; recursive = true; };
-      "icons" = { source = "${assets}/share/icons"; recursive = true; };
-    } // lib.optionalAttrs cfg.appleAssets {
-      "wallpapers" = { source = "${packages.apple-assets}/share/wallpapers"; recursive = true; };
-    };
+    xdg.dataFile = (mapFolderItems "plasma/desktoptheme" "${assets}/share/plasma/desktoptheme") // 
+        (mapFolderItems "plasma/look-and-feel" "${assets}/share/plasma/look-and-feel") //
+        (mapFolderItems "plasma/plasmoids" "${assets}/share/plasma/plasmoids") //
+        (mapFolderItems "aurorae/themes" "${assets}/share/aurorae/themes") //
+        (mapFolderItems "color-schemes" "${assets}/share/color-schemes") //
+        (mapFolderItems "icons" "${assets}/share/icons") //
+          (lib.optionalAttrs cfg.appleAssets (mapFolderItems "wallpapers" "${packages.apple-assets}/share/wallpapers"));
     xdg.configFile = lib.listToAttrs (map (name: {
       name = "Kvantum/${name}";
       value.source = "${assets}/share/Kvantum/${name}";
@@ -84,7 +95,7 @@ in {
       };
       Service = {
         Type = "oneshot";
-        ExecStartPre = "${initEffects}";
+        ExecStartPre = [ "${setAssetsWritable}" "${initEffects}" ];
         ExecStart = "${packages.tools}/bin/mac-tahoe-theme-switch ${cfg.mode}";
       };
       Install.WantedBy = [ "plasma-plasmashell.service" ];
